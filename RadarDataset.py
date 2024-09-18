@@ -1,49 +1,40 @@
-import os
-import re
-import glob
-from torch.utils.data import Dataset, DataLoader
-from PIL import Image
-import torchvision.transforms as transforms
+# [signal_type]>[snr_value]>[step]>[timepoint][real, imag]
+import torch
+from torch.utils.data import Dataset
 
-class RadarDataset(Dataset):
-    def __init__(self, directory, signal_types):
-        self.directory = directory
-        self.signal_types = signal_types
-        self.data, self.labels, self.snrs, self.numb = ([] for _ in range(4))
-        self.label_map = {signal: idx for idx, signal in enumerate(signal_types)}
-        self.transform = transforms.Compose([
-            transforms.Grayscale(num_output_channels=1),
-            transforms.Resize((100, 100)),
-            transforms.ToTensor()
-        ])
-        self._load_data()
-
+class RadarSignalDataset(Dataset):
+    def __init__(self, signals_data, signal_types, snr_max=17, fft=True):
+        self.data, self.labels, self.snrs = ([] for _ in range(3))
+        self.fft = fft
+        
+        for signal_type in signal_types:
+            print(f"Data loading for '{signal_type}'", end='')
+            for snr_idx, snr in enumerate(range(0, snr_max, 2)): 
+                print(".", end='') if snr_idx % 2 == 0 else None
+                ssnr = str(snr)
+                if ssnr in signals_data[signal_type]: 
+                    signal_snr_data = signals_data[signal_type][ssnr]
+                    for signal in signal_snr_data:
+                        complex_signal = [self.convIQ(x) for x in signal]
+                        if self.fft:
+                            complex_signal = self.applyFFT(complex_signal)
+                        self.data.append(complex_signal)
+                        self.labels.append(signal_type)
+                        self.snrs.append(snr)
+            print("Done!")
+    
+    def convIQ(self, datastring):
+        comp = complex(datastring.replace('i', 'j'))
+        return comp.real, comp.imag    
+    
+    def applyFFT(self, signal):
+        signal_tensor = torch.tensor(signal, dtype=torch.float32)
+        fft_signal = torch.fft.fft(signal_tensor)
+        return torch.abs(fft_signal), torch.angle(fft_signal)
+            
     def __len__(self):
         return len(self.data)
-
-    def __getitem__(self, idx):
-        return self.data[idx], self.label_map[self.labels[idx]], self.snrs[idx], self.numb[idx]
     
-    def snr_sorted(self, filename):
-        match = re.search(r'snr-(\d+)', filename)
-        if match:
-            return int(match.group(1))
-        else:
-            return None
-        
-    def _load_data(self):
-        for signal in self.signal_types:
-            signal_path = os.path.join(self.directory, signal)
-            if os.path.exists(signal_path):
-                png_files = sorted(glob.glob(os.path.join(signal_path, "*.png")), key=self.snr_sorted)
-                for file_path in png_files:
-                    image = Image.open(file_path).convert('RGB')
-                    image = self.transform(image)
-                    snr = self.snr_sorted(os.path.basename(file_path))
-                    num = re.search(r'no(\d{5})', os.path.basename(file_path)).group(1)
-
-                    self.data.append(image)
-                    self.labels.append(signal)
-                    self.snrs.append(snr)
-                    self.numb.append(num)  
+    def __getitem__(self, idx):
+        return self.data[idx], self.labels[idx], self.snrs[idx]
     
