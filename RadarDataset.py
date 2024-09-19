@@ -3,7 +3,7 @@ import torch
 from torch.utils.data import Dataset
 
 class RadarSignalDataset(Dataset):
-    def __init__(self, signals_data, signal_types, snr_max=17, fft=True):
+    def __init__(self, signals_data, signal_types, snr_max=17, fft=False):
         self.data, self.labels, self.snrs = ([] for _ in range(3))
         self.fft = fft
         

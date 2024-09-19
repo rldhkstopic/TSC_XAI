@@ -12,10 +12,11 @@ TransformedTypes = {'DWT' : "/data/kiwan/Unknown_radar_detection/Adaptive_wavele
                     'CWD' : "/data/kiwan/Unknown_radar_detection/Adaptive_wavelet_transform/240523_CWD-v1/",
                     'SAFI' : "/data/kiwan/Unknown_radar_detection/Adaptive_wavelet_transform/240523_SAFI-v1/",}
 
-json_file = 'dataset/CWD_signal.json'
+with open('dataset/CWD_signal.json', 'r') as f:
+    TrainData = json.load(f)
 
-with open(json_file, 'r') as f:
-    SignalData = json.load(f)
-    
-    
-    
+with open('dataset/CWD_signal_test.json', 'r') as f:
+    TestData = json.load(f)
+
+typeSize = 4
+
