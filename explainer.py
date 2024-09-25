@@ -6,10 +6,10 @@ class LRP:
     def __init__(self, model, epsilon=1e-5):
         self.model = model
         self.epsilon = epsilon
-        self.model.eval()  # 모델을 평가 모드로 설정
+        self.model.eval()
 
-    def forward(self, x):
-        return self.model(x)
+    def forward(self, x, lstm_outputs=False):
+        return self.model(x, lstm_outputs)
     
     def get_relevance(self, x, target=None):
         """
@@ -19,6 +19,7 @@ class LRP:
 
         모델의 예측 결과를 기반으로 타겟 클래스의 기여도를 계산하여 relevance를 반환.
         """
+        
         # 순전파 수행
         x.requires_grad = True
         output = self.forward(x)
@@ -54,28 +55,18 @@ class LRP:
         
         return relevance
     
-    def linear_lrp(self, layer, x, relevance):
-        """
-        선형 층의 LRP 계산.
-        - layer: nn.Linear 레이어
-        - x: 입력 텐서
-        - relevance: 기여도 텐서
-        """
-        weight = layer.weight
-        bias = layer.bias
+    def linear_lrp(self, layer, x, relevance):  # x : torch.Size([32, 1495, 2])
+        xf = x.reshape(-1, x.size(-1))  # xf : torch.Size([47640, 2])    
+        print(x[:,:,0], x[:,:,1])                   
+        weight = layer.weight   # weight: [out_features:4, in_features:256] 
+        bias = layer.bias       # bias: [out_features:4]
         
-        z = F.linear(x, weight, bias) + self.epsilon  # 작은 epsilon 추가
+        z = F.linear(xf, weight, bias) + self.epsilon  # = x * weight + bias + epsilon
         s = relevance / z
         c = torch.matmul(s, weight)
         return x * c
     
     def bilstm_lrp(self, layer, x, relevance):
-        """
-        BiLSTM 층의 LRP 계산.
-        - layer: nn.LSTM 레이어 (BiLSTM 포함)
-        - x: 입력 텐서
-        - relevance: 기여도 텐서
-        """
         # 양방향 LSTM인 경우 forward와 backward에 대해 기여도를 나누어 계산
         h, (hn, cn) = layer(x)
         
