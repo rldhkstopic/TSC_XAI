@@ -25,11 +25,13 @@ class BiLSTM(nn.Module):
 
         # LSTM output
         out, (hn, cn) = self.lstm(x, (h0, c0))
+
         out_last = self.dropout(out[:, -1, :])  # Dropout
         out_fc = self.fc(out_last)
 
+        # out은 모든 time step의 hidden state를 포함하고 있음
         if lstm_outputs:
-            return out_fc, out  # (모델 출력, LSTM hidden outputs)
+            return out_fc, out
         else:
             return out_fc
 
@@ -58,7 +60,7 @@ class BiLSTM(nn.Module):
                 labels_batch = labels_batch.to(device)
 
                 optimizer.zero_grad() 
-                outputs = self(data_batch)  
+                outputs = self(data_batch)  # self()는 forward()를 호출함
                 
                 loss = criterion(outputs, labels_batch)
                 loss.backward()  
