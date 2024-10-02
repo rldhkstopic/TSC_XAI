@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import _config as c
+import models._config as c
 import torch.nn.utils.rnn as rnn_utils
 from matplotlib import pyplot as plt
 import visdom

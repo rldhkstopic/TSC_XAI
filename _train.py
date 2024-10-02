@@ -9,7 +9,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 
-import _config as c
+import models._config as c
 from models.LSTM import BiLSTM
 from models.Attention import Transformer
 from explainer import LRP
@@ -52,51 +52,56 @@ params = {
     'num_classes': args.num_classes
 }
     
-criterion = nn.CrossEntropyLoss()
 
+class LabelSmoothingLoss(nn.Module):
+    def __init__(self, classes, smoothing=0.1):
+        super(LabelSmoothingLoss, self).__init__()
+        self.confidence = 1.0 - smoothing
+        self.smoothing = smoothing
+        self.cls = classes
+
+    def forward(self, pred, target):
+        pred = pred.log_softmax(dim=-1)
+        true_dist = torch.zeros_like(pred).scatter_(1, target.data.unsqueeze(1), self.confidence)
+        true_dist += self.smoothing / self.cls
+        return torch.mean(torch.sum(-true_dist * pred, dim=-1))
+    
 def train_set(dataset, mtype='LSTM'):
     print(f"Size of train dataset: {len(dataset)}")
     for snr in range(params['snr_min'], params['snr_max']+1, 2):
-        ckpt = os.path.join("./ckpts/", snr_str:=f"-{snr}dB" if snr != 0 else "0dB")
-        print(f"\nTraining model for SNR: {snr_str}...")
+        print(f"\nTraining model for SNR: {snr}...")
+        ckpt = os.path.join("./ckpts/", snr_str:=f"SNR-{snr}dB" if snr != 0 else " 0dB")
         os.makedirs(ckpt, exist_ok=True)
         
-        if mtype == 'LSTM':
-            model = BiLSTM(params['input_size'], params['hidden_size'], 
-                        params['num_layers'], params['num_classes']).to(c.device)
-        elif mtype == 'Attention':
-            model = Transformer(params['input_size'], params['hidden_size'], 
-                    params['num_layers'], params['num_classes'], nhead=8, dropout=0.3).to(c.device)
-           
+        model = BiLSTM(params['input_size'], params['hidden_size'], params['num_layers'], params['num_classes'])
+        model.to(c.device)
+        
+        criterion = nn.CrossEntropyLoss()
+        # criterion = LabelSmoothingLoss(classes=params['num_classes'], smoothing=0.1).to(c.device)
         optimizer = optim.Adam(model.parameters(), lr=params['learning_rate'], 
                                                     weight_decay=params['weight_decay'])
         
-        snr_dataset = [(data, label, data_snr) for data, label, data_snr in dataset if data_snr == snr]
+        snr_dataset = [(data, label, data_snr, length) for data, label, data_snr, length in dataset if data_snr == snr]
         snr_loader = DataLoader(snr_dataset, batch_size=params['batch_size'], shuffle=True, collate_fn=model.collate)
             
         best_state, best_loss = model.train_model(snr_loader, criterion, optimizer, params['num_epochs'], c.device, snr_str, ckpt)
-        
+
         save_point = f'{ckpt}/{mtype}_{snr_str}_{best_loss:.4f}.pt'
         
         torch.save(best_state, save_point)
         print(f"Model checkpoint saved at {save_point}")
 
+
 def eval_set(dataset, mtype='LSTM'):
     print(f"Size of test dataset: {len(dataset)}")
     for snr in range(params['snr_min'], params['snr_max']+1, 2):
-        ckpt = os.path.join("./ckpts/", snr_str:=f"-{snr}dB" if snr != 0 else "0dB")
-        ckpts = [f for f in os.listdir(ckpt) if f.endswith(".pt")]
+        ckpt = os.path.join("./ckpts/", snr_str:=f"SNR-{snr}dB" if snr != 0 else " 0dB")
+        ckpts = [f for f in os.listdir(ckpt) if f.endswith(".pt") and f.startswith("BiLSTM")]
         
-        if mtype == 'LSTM':
-            model = BiLSTM(params['input_size'], params['hidden_size'], 
-                        params['num_layers'], params['num_classes']).to(c.device)
-        elif mtype == 'Attention':
-            model = Transformer(params['input_size'], params['hidden_size'], 
-                    params['num_layers'], params['num_classes'], nhead=8, dropout=0.3).to(c.device)
-            
+        model = BiLSTM(params['input_size'], params['hidden_size'], params['num_layers'], params['num_classes']).to(c.device)
         model.load_state_dict(torch.load(f"{ckpt}/{ckpts[0]}"))
         model.eval()
-        
+        criterion = nn.CrossEntropyLoss()
         snr_dataset = [(data, label, data_snr) for data, label, data_snr in dataset if data_snr == snr]
         snr_loader = DataLoader(snr_dataset, batch_size=params['batch_size'], shuffle=True, collate_fn=model.collate)
         
@@ -196,7 +201,7 @@ def explain_set(dataset, mtype='LSTM'):
     return explanation_results
         
 
-from RadarDataset import RadarSignalDataset  
+from dataset.RadarDataset import RadarSignalDataset  
 
 if __name__ == "__main__":
     if args.mode == 'train':

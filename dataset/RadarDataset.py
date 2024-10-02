@@ -1,10 +1,9 @@
-# [signal_type]>[snr_value]>[step]>[timepoint][real, imag]
 import torch
 from torch.utils.data import Dataset
 
 class RadarSignalDataset(Dataset):
     def __init__(self, signals_data, signal_types, snr_max=17, fft=False):
-        self.data, self.labels, self.snrs = ([] for _ in range(3))
+        self.data, self.labels, self.snrs, self.lengths = ([] for _ in range(4))
         self.fft = fft
         
         for signal_type in signal_types:
@@ -21,6 +20,7 @@ class RadarSignalDataset(Dataset):
                         self.data.append(complex_signal)
                         self.labels.append(signal_type)
                         self.snrs.append(snr)
+                        self.lengths.append(len(complex_signal))  # 시퀀스 길이 저장
             print("Done!")
     
     def convIQ(self, datastring):
@@ -36,5 +36,4 @@ class RadarSignalDataset(Dataset):
         return len(self.data)
     
     def __getitem__(self, idx):
-        return self.data[idx], self.labels[idx], self.snrs[idx]
-    
+        return self.data[idx], self.labels[idx], self.snrs[idx], self.lengths[idx]  # 길이 추가 반환
