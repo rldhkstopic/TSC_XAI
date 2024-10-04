@@ -1,8 +1,8 @@
 import torch
 import json
 
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
-torch.cuda.set_device(device)
+# device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+# torch.cuda.set_device(device)
 
 signalTypes = ['Barker', 'Costas', 'Frank', 'LFM', 'P1', 'P2', 'P3', 'P4', 'T1', 'T2', 'T3', 'T4']
 label_mapping = {signal: idx for idx, signal in enumerate(signalTypes)}

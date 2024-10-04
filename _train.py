@@ -65,32 +65,28 @@ class LabelSmoothingLoss(nn.Module):
         true_dist = torch.zeros_like(pred).scatter_(1, target.data.unsqueeze(1), self.confidence)
         true_dist += self.smoothing / self.cls
         return torch.mean(torch.sum(-true_dist * pred, dim=-1))
-    
-def train_set(dataset, mtype='LSTM'):
+
+def train_set(dataset):
+
     print(f"Size of train dataset: {len(dataset)}")
-    for snr in range(params['snr_min'], params['snr_max']+1, 2):
-        print(f"\nTraining model for SNR: {snr}...")
-        ckpt = os.path.join("./ckpts/", snr_str:=f"SNR-{snr}dB" if snr != 0 else " 0dB")
-        os.makedirs(ckpt, exist_ok=True)
-        
-        model = BiLSTM(params['input_size'], params['hidden_size'], params['num_layers'], params['num_classes'])
-        model.to(c.device)
-        
-        criterion = nn.CrossEntropyLoss()
-        # criterion = LabelSmoothingLoss(classes=params['num_classes'], smoothing=0.1).to(c.device)
-        optimizer = optim.Adam(model.parameters(), lr=params['learning_rate'], 
-                                                    weight_decay=params['weight_decay'])
-        
-        snr_dataset = [(data, label, data_snr, length) for data, label, data_snr, length in dataset if data_snr == snr]
-        snr_loader = DataLoader(snr_dataset, batch_size=params['batch_size'], shuffle=True, collate_fn=model.collate)
-            
-        best_state, best_loss = model.train_model(snr_loader, criterion, optimizer, params['num_epochs'], c.device, snr_str, ckpt)
+    
+    criterion = nn.CrossEntropyLoss()
 
-        save_point = f'{ckpt}/{mtype}_{snr_str}_{best_loss:.4f}.pt'
-        
-        torch.save(best_state, save_point)
-        print(f"Model checkpoint saved at {save_point}")
+    model = BiLSTM(params['input_size'], params['hidden_size'], params['num_layers'], params['num_classes'])
+    
+    if torch.cuda.device_count() > 1:
+        print("Using", torch.cuda.device_count(), "GPUs with DataParallel.")
+        model = nn.DataParallel(model, device_ids=[0, 1])
+    model.to('cuda')
+    
+    optimizer = optim.Adam(model.parameters(), lr=params['learning_rate'], weight_decay=params['weight_decay'])
+    
+    loader = DataLoader(dataset, batch_size=256, shuffle=True, collate_fn=model.module.collate, num_workers=16)
+    best_state, best_loss = model.module.train_model(loader, criterion, optimizer, params['num_epochs'])
 
+
+    torch.save(best_state, f'./ckpts/result_loss_{best_loss:.4f}.pt')
+    print("Train is done.")
 
 def eval_set(dataset, mtype='LSTM'):
     print(f"Size of test dataset: {len(dataset)}")
@@ -206,7 +202,7 @@ from dataset.RadarDataset import RadarSignalDataset
 if __name__ == "__main__":
     if args.mode == 'train':
         train_dataset = RadarSignalDataset(c.TrainData, c.signalTypes[0:c.typeSize], snr_max=17)
-        train_set(train_dataset, mtype=params['model_type'])
+        train_set(train_dataset)
     elif args.mode == 'eval':
         test_dataset = RadarSignalDataset(c.TestData, c.signalTypes[0:c.typeSize], snr_max=17)
         eval_set(test_dataset, mtype=params['model_type'])
