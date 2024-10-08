@@ -231,16 +231,19 @@ def explain_set(dataset, mtype='LSTM'):
 
 from dataset.RadarDataset import RadarSignalDataset  
 
+from models._config import C
+c = C()
+
 if __name__ == "__main__":
+    datajson = c.dataload(csv=True, mode=args.mode)
+    dataset = RadarSignalDataset(datajson, c.signalTypes[0:c.typeSize], snr_max=17)
+    
     if args.mode == 'train':
-        train_dataset = RadarSignalDataset(c.TrainData, c.signalTypes[0:c.typeSize], snr_max=16)
-        train_set(train_dataset)
+        train_set(dataset)
     elif args.mode == 'eval':
-        test_dataset = RadarSignalDataset(c.TestData, c.signalTypes[0:c.typeSize], snr_max=17)
-        eval_set(test_dataset, mtype=params['model_type'])
+        eval_set(dataset, mtype=params['model_type'])
     elif args.mode == 'explain':
-        explain_dataset = RadarSignalDataset(c.TestData, c.signalTypes[0:c.typeSize], snr_max=17)
-        explain_set(explain_dataset)
+        explain_set(dataset)
         
 # %%
 
