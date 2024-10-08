@@ -3,11 +3,13 @@ import os
 import argparse
 import numpy as np
 
+import visdom
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 import models._config as c
 from models.LSTM import BiLSTM
@@ -67,23 +69,66 @@ class LabelSmoothingLoss(nn.Module):
         return torch.mean(torch.sum(-true_dist * pred, dim=-1))
 
 def train_set(dataset):
-
+    vis = visdom.Visdom()
+    assert vis.check_connection(), "Visdom 서버 실행 : python -m visdom.server"
+    vis_window = vis.line(X=torch.zeros((1,)).cpu(), Y=torch.zeros((1,)).cpu(), opts=dict(xlabel='Epoch', ylabel='Loss', title=f'Training Loss', legend=['Loss'])    )
     print(f"Size of train dataset: {len(dataset)}")
-    
-    criterion = nn.CrossEntropyLoss()
 
-    model = BiLSTM(params['input_size'], params['hidden_size'], params['num_layers'], params['num_classes'])
+    losses = []  
+    best_loss = float('inf')
+    best_state = None
     
-    if torch.cuda.device_count() > 1:
-        print("Using", torch.cuda.device_count(), "GPUs with DataParallel.")
-        model = nn.DataParallel(model, device_ids=[0, 1])
+
+    print("Using", torch.cuda.device_count(), "GPUs with DataParallel.")
+    model = BiLSTM(params['input_size'], params['hidden_size'], params['num_layers'], params['num_classes'])
+    model = nn.DataParallel(model, device_ids=[0, 1])
     model.to('cuda')
     
+    criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=params['learning_rate'], weight_decay=params['weight_decay'])
+    loader = DataLoader(dataset, batch_size=params['batch_size'], shuffle=True, collate_fn=model.module.collate, num_workers=16)
     
-    loader = DataLoader(dataset, batch_size=256, shuffle=True, collate_fn=model.module.collate, num_workers=16)
-    best_state, best_loss = model.module.train_model(loader, criterion, optimizer, params['num_epochs'])
+    epochs = params['num_epochs']
+    for epoch in range(epochs):
+        model.train()  
+        rl = 0.0  
+        
+        progress_bar = tqdm(enumerate(loader), total=len(loader), desc=f"Epoch {epoch + 1}/{epochs}", leave=False)
+        
+        for batch_idx, (data_batch, labels_batch, _, lengths_batch) in progress_bar:
+            optimizer.zero_grad()
+            
+            outputs = model(data_batch, lengths_batch)
+            labels_batch = labels_batch.to(outputs.device)
+            
+            loss = criterion(outputs, labels_batch)
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            
+            optimizer.step()
 
+            rl += loss.item()
+
+            progress_bar.set_postfix({'Batch': f"{batch_idx + 1}/{len(loader)}", 'Loss': f"{loss.item():.4f}"})
+
+            loss.detach()
+
+        avg_loss = rl / len(loader)
+        losses.append(avg_loss)
+
+        vis.line(X=torch.tensor([epoch + 1]).cpu(), Y=torch.tensor([avg_loss]).cpu(), win=vis_window, update='append')
+
+        print(f'Epoch [{epoch + 1}/{epochs}], Loss: {avg_loss:.4f}')
+        
+        if avg_loss < best_loss:
+            best_loss = avg_loss
+            best_state = model.state_dict()
+            torch.save(best_state, f'./ckpts/result_loss.pt')
+
+            if best_loss < 0.01:
+                break
+        
+        torch.cuda.empty_cache()
 
     torch.save(best_state, f'./ckpts/result_loss_{best_loss:.4f}.pt')
     print("Train is done.")
@@ -120,14 +165,6 @@ def eval_set(dataset, mtype='LSTM'):
 
 
 def explain_set(dataset, mtype='LSTM'):
-    """
-    설명 및 기여도 분석을 위한 함수.
-    주어진 데이터셋과 모델을 사용하여 각 데이터에 대한 LRP 기여도 계산 및 시각화.
-    
-    Parameters:
-        - dataset: 입력 데이터셋
-        - mtype: 모델 타입 ('LSTM', 'Attention' 등)
-    """
     print(f"Size of explain dataset: {len(dataset)}")
     for snr in range(params['snr_min'], params['snr_max']+1, 2):
         print(f"\nExplaining model for SNR: {snr}...")
@@ -167,26 +204,21 @@ def explain_set(dataset, mtype='LSTM'):
                     
                     explanation_results.append((sample_relevance, label))
 
-                    # 히트맵으로 시각화
                     fig, ax = plt.subplots(figsize=(12, 6))
                     time_steps = np.arange(sample_data.shape[0])
 
-                    # 원본 신호 플롯
                     ax.plot(time_steps, sample_data[:, 0], label='Signal', color='blue')
                     ax.set_title(f'Sample {i * params["batch_size"] + j} - SNR: {snr}dB, Label: {label}')
                     ax.set_xlabel('Time Step')
                     ax.set_ylabel('Amplitude')
 
-                    # 히트맵 오버레이
                     im = ax.imshow(sample_relevance.T, aspect='auto', cmap='hot', alpha=0.6,
                                    extent=[0, sample_data.shape[0], 
                                            np.min(sample_data), np.max(sample_data)])
 
-                    # 컬러바 추가
                     cbar = plt.colorbar(im, ax=ax)
                     cbar.set_label('Relevance Score')
 
-                    # 시각화 저장
                     plot_path = os.path.join(results_dir, f"sample_{i * params['batch_size'] + j}_heatmap.png")
                     plt.savefig(plot_path)
                     plt.close()
@@ -201,7 +233,7 @@ from dataset.RadarDataset import RadarSignalDataset
 
 if __name__ == "__main__":
     if args.mode == 'train':
-        train_dataset = RadarSignalDataset(c.TrainData, c.signalTypes[0:c.typeSize], snr_max=17)
+        train_dataset = RadarSignalDataset(c.TrainData, c.signalTypes[0:c.typeSize], snr_max=16)
         train_set(train_dataset)
     elif args.mode == 'eval':
         test_dataset = RadarSignalDataset(c.TestData, c.signalTypes[0:c.typeSize], snr_max=17)

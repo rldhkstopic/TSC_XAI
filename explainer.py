@@ -77,4 +77,36 @@ class LRP:
         total_relevance = rel_fw + rel_bw  # [batch_size, seq_len, hidden_size * 2]
         
         return total_relevance
-
+    def compute_lstm_relevance(self, layer, x, relevance, direction='forward'):
+        """
+        LSTM의 각 시간 스텝에 대해 relevance 계산.
+        - layer: nn.LSTM 레이어
+        - x: 입력 텐서
+        - relevance: 기여도 텐서
+        - direction: 'forward' or 'backward' (방향 선택)
+        """
+        # 정방향 또는 역방향 LSTM의 각 시간 스텝에 대해 relevance를 계산
+        seq_len = x.size(1)
+        
+        # 방향에 따라 시퀀스를 정방향 또는 역방향으로 순회하며 기여도 계산
+        if direction == 'forward':
+            time_steps = range(seq_len)
+        elif direction == 'backward':
+            time_steps = reversed(range(seq_len))
+        
+        # 시퀀스를 순회하면서 각 시간 스텝에 대한 기여도 계산
+        for t in time_steps:
+            h_t = layer(x[:, t, :])[0]  # 현재 시간 스텝의 LSTM 출력
+            z = h_t + self.epsilon  # 작은 epsilon 추가
+            s = relevance[:, t, :] / z  # relevance 계산
+            relevance[:, t, :] = x[:, t, :] * s
+        
+        return relevance
+    
+    def activation_lrp(self, layer, x, relevance):
+        """
+        활성화 함수의 LRP 계산 (ReLU, Tanh 등).
+        활성화 함수에서는 LRP를 사용하여 기여도 역전파를 수행.
+        """
+        # 활성화 함수의 입력 x에 대해 기여도를 직접 역전파
+        return relevance * (x > 0).float()  # 활성화된 뉴런만 기여도를 전달

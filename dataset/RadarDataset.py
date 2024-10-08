@@ -5,6 +5,7 @@ class RadarSignalDataset(Dataset):
     def __init__(self, signals_data, signal_types, snr_max=17, fft=False):
         self.data, self.labels, self.snrs, self.lengths = ([] for _ in range(4))
         self.fft = fft
+        self.device = 'cuda'
         
         for signal_type in signal_types:
             print(f"Data loading for '{signal_type}'", end='')
