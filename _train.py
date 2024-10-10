@@ -101,7 +101,7 @@ def train_set(dataset):
             outputs = model(data_batch, lengths_batch)
             labels_batch = labels_batch.to(outputs.device)
             
-            loss = criterion(outputs, labels_batch)
+            loss = criterion(outputs, labels_batch) 
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             
@@ -249,3 +249,78 @@ if __name__ == "__main__":
 
 
 # %%
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.fft import fft
+
+# 신호를 주파수 도메인으로 변환하는 함수
+def fft_transform(data_real, data_imag):
+    complex_signal = data_real + 1j * data_imag  # 실수부와 허수부 결합
+    fft_data = np.fft.fft(complex_signal)  # FFT 변환
+    fft_amplitude = np.abs(fft_data)  # 진폭 계산
+    return fft_amplitude[:len(fft_amplitude) // 2]  # 절반만 사용
+
+# Relevance score를 주파수 도메인에서 분석하는 함수
+def analyze_frequency_domain(data_real, data_imag, rel_real, rel_imag):
+    # 신호의 FFT 변환
+    signal_freq = fft_transform(data_real, data_imag)
+    
+    # Relevance score의 FFT 변환
+    rel_freq = fft_transform(rel_real, rel_imag)
+    
+    return signal_freq, rel_freq
+
+# 신호와 relevance score를 플롯하는 함수
+def plot_frequency_analysis(signal_freq, rel_freq, seq_len, batch_idx):
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(signal_freq, label='Signal (FFT Amplitude)', color='black')
+    ax.plot(rel_freq, label='Relevance (FFT Amplitude)', color='red')
+    ax.set_title(f'Sample {batch_idx+1} Frequency Domain Analysis')
+    ax.legend()
+    plt.show()
+
+# 설명하는 함수
+def explain_set(config, train_dataset):
+    device = config.device
+    model = BiLSTM(input_size=2, hidden_size=128, num_layers=2, num_classes=12)
+
+    # 모델 로드
+    state_dict = torch.load('./ckpts/result_loss.pt')
+    model.load_state_dict(state_dict)
+    model.to(device)
+    model.eval()
+   
+    lrp = LRP(model, device=device)
+    
+    with torch.no_grad():
+        batch_size = 4
+        fig = plt.figure(figsize=(20, 15))
+        
+        # 0dB SNR에 해당하는 배치 추출
+        snr_batch = [(data_batch, labels_batch, snrs_batch, lengths_batch) 
+                     for data_batch, labels_batch, snrs_batch, lengths_batch in train_dataset if snrs_batch == 0]
+        batch = DataLoader(snr_batch, batch_size=batch_size, shuffle=False, collate_fn=model.collate)
+
+        for batch_idx, (data_batch, labels_batch, snrs_batch, lengths_batch) in enumerate(batch):
+            r_scores, gt_label = lrp.relevance(data_batch, lengths_batch, target=labels_batch)
+            seq_len = lengths_batch[batch_idx].item()
+
+            # 신호의 실수부와 허수부
+            data_real = data_batch[batch_idx, :seq_len, 0].cpu().numpy()  # 실수부
+            data_imag = data_batch[batch_idx, :seq_len, 1].cpu().numpy()  # 허수부
+
+            # relevance score의 실수부와 허수부
+            rel_real = r_scores[batch_idx, :seq_len, 0].cpu().numpy()   # Relevance 실수부
+            rel_imag = r_scores[batch_idx, :seq_len, 1].cpu().numpy()   # Relevance 허수부
+
+            # 주파수 도메인 분석
+            signal_freq, rel_freq = analyze_frequency_domain(data_real, data_imag, rel_real, rel_imag)
+            
+            # 주파수 분석 플롯
+            plot_frequency_analysis(signal_freq, rel_freq, seq_len, batch_idx)
+
+            if batch_idx >= batch_size - 1: 
+                break  
+
+plt.tight_layout()
+plt.show()
