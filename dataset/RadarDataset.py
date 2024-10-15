@@ -27,14 +27,9 @@ class RadarSignalDataset(Dataset):
     def convIQ(self, datastring):
         comp = complex(datastring.replace('i', 'j'))
         return comp.real, comp.imag    
-    
-    def applyFFT(self, signal):
-        signal_tensor = torch.tensor(signal, dtype=torch.float32)
-        fft_signal = torch.fft.fft(signal_tensor)
-        return torch.abs(fft_signal), torch.angle(fft_signal)
-            
+                
     def __len__(self):
         return len(self.data)
     
     def __getitem__(self, idx):
-        return self.data[idx], self.labels[idx], self.snrs[idx], self.lengths[idx]  # 길이 추가 반환
+        return self.data[idx], self.labels[idx], self.snrs[idx], self.lengths[idx]  

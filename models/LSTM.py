@@ -62,7 +62,7 @@ class BiLSTM(nn.Module):
         out_fc = self.fc(out_last) 
                 
         if lstm_outputs:
-            return out_fc, out, attn_weights
+            return out_fc, out, attn_weights # hidden states = out
         else:
             return out_fc
 
