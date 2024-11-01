@@ -1,0 +1,10 @@
+*.json
+*.pt
+
+*.npy
+*.csv
+
+*.png
+*.pth
+
+./_older/*
