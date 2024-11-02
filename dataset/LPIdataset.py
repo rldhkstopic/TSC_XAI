@@ -1,53 +1,64 @@
 import os
 import numpy as np
 import torch
-import models._config as c
-import torch.nn.utils.rnn as rnn_utils
-
+from scipy.signal import stft
 
 class LPIDataset:
-    def __init__(self, data_dir, waveforms, data_type='Signal'):
+    def __init__(self, data_dir, waveforms, data_type='Signal', nperseg=256, model_type='BiLSTM'):
         self.data_dir = data_dir
         self.waveform = waveforms
         self.data_type = data_type
         self.file_list = self._collect()
+        self.nperseg = nperseg  # STFT 윈도우 크기
+        self.model_type = model_type
 
     def _collect(self):
+        """ 데이터 파일 목록을 수집 """
         files = []
         for waveform in self.waveform:
             waveform_folder = os.path.join(self.data_dir, waveform)
             files.extend([f for f in os.listdir(waveform_folder) if self.data_type in f])
-        
         return files
 
     def _parse(self, file):
+        """ 파일명에서 메타데이터 파싱 """
         parts = file.replace('.npy', '').split('_')
         label, snr, type, fps_idx = parts[0], int(parts[1].replace('snr', '')), parts[2], int(parts[3])
-        
         return type, label, snr, fps_idx
 
     def _convIQ(self, complex_data):
+        """ I/Q 데이터를 실수부와 허수부로 분리 """
         return complex_data.real, complex_data.imag
-    
+
+    def _stft_transform(self, data):
+        """ 시계열 데이터를 STFT로 변환하여 TFI 이미지 생성 """
+        f, t, Zxx_real = stft(data.real, nperseg=self.nperseg)
+        _, _, Zxx_imag = stft(data.imag, nperseg=self.nperseg)
+        TFI_image = np.stack([np.abs(Zxx_real), np.abs(Zxx_imag)], axis=0)  # (2, freq, time) 형태
+        return TFI_image
+
     def __len__(self):
         return len(self.file_list)
 
     def __getitem__(self, idx):
         file = self.file_list[idx]
-        type, label, snr, fps_idx= self._parse(file)
+        type, label, snr, fps_idx = self._parse(file)
         file_path = os.path.join(self.data_dir, label, file)
-        
+
+        # I/Q 데이터 로드
         complex_data = np.load(file_path)
-        IQ_data = [self._convIQ(c) for c in complex_data]
-        
-        return IQ_data, label, len(complex_data), snr, type, fps_idx 
-    
-    @staticmethod
-    def collate(batch):
-        data, labels, lengths, _, _, _ = zip(*batch)
-        data = [torch.tensor(seq, dtype=torch.float32) for seq in data]
-        data_pad = rnn_utils.pad_sequence(data, batch_first=True)
-        labels = torch.tensor([c.label_mapping[label] for label in labels], dtype=torch.long)
-        lengths = torch.tensor(lengths, dtype=torch.int64)
-        
-        return data_pad, labels, lengths
+
+        if self.model_type == 'BiLSTM':
+            # BiLSTM 모델의 경우 원본 시계열 데이터를 I/Q 분리하여 사용
+            IQ_data = [self._convIQ(c) for c in complex_data]
+            data_tensor = torch.tensor(IQ_data, dtype=torch.float32)
+            length = len(data_tensor)  # 시퀀스 길이 반환
+            return data_tensor, label, length
+
+        else:
+            # UNet 및 U2Net 모델의 경우 STFT 변환된 TFI 이미지 사용
+            TFI_image = self._stft_transform(complex_data)
+            data_tensor = torch.tensor(TFI_image, dtype=torch.float32)
+            return data_tensor, label  # CNN 모델이므로 시퀀스 길이는 필요 없음
+
+

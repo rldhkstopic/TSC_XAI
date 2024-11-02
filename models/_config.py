@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from scipy.signal import stft
+import torch.nn.utils.rnn as rnn_utils
 
 
 
@@ -13,27 +14,27 @@ label_mapping = {signal: idx for idx, signal in enumerate(waveforms)}
 typeSize = 12
 fs = 100e6
 
-class C:
-    def __init__(self, typeSize=12):
-        self.typeSize = typeSize
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.signalTypes = ['Barker', 'Costas', 'Frank', 'LFM', 'P1', 'P2', 'P3', 'P4', 'T1', 'T2', 'T3', 'T4']
-        self.label_mapping = {signal: idx for idx, signal in enumerate(self.signalTypes)}
-        
-    def dataload(self, mode, csv=True):
-        if mode == 'train' or mode == 'explain':
-            print(f"<<Loading Train Data [{csv}]>>")
-            ckpt = './dataset/LPI12_CSV.json' if csv == True else './dataset/LPI12_NMP.json'
-        elif mode == 'test':
-            print(f"<<Loading Test Data [{csv}]>>")
-            ckpt = './dataset/LPI12_CSV_test.json' if csv == True else './dataset/LPI12_NMP_test.json'
-            
-        with open(ckpt, 'r') as f:
-            self.dataset = json.load(f)
-        return self.dataset
-    
-    def signals(self):
-        return self.signalTypes, self.label_mapping
+def collate(batch):
+    if isinstance(batch[0][2], int):  
+        data, labels, lengths = zip(*batch)
+        data = [torch.tensor(seq, dtype=torch.float32) for seq in data]
+        data_pad = rnn_utils.pad_sequence(data, batch_first=True)
+
+        label_to_index = {label: idx for idx, label in enumerate(waveforms)}
+        labels = torch.tensor([label_to_index[label] for label in labels], dtype=torch.long)
+        lengths = torch.tensor(lengths, dtype=torch.int64)
+        return data_pad, labels, lengths
+
+    else:  # UNet 또는 U2Net 모델
+        data, labels = zip(*batch)
+        data = torch.stack(data, dim=0)
+        label_to_index = {label: idx for idx, label in enumerate(waveforms)}
+        labels = torch.tensor([int(label) for label in labels], dtype=torch.long)
+        return data, labels
+
+
+
+
 
 def snr_string(snr):
     return f'{snr}' if snr==0 else f'-{snr}'

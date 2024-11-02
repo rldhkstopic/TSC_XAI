@@ -1,10 +1,10 @@
 
 import torch
 import torch.nn as nn
-import models._config as c
 import torch.nn.functional as F
 import torch.nn.utils.rnn as rnn_utils
-from matplotlib import pyplot as plt
+
+
 class SelfAttention(nn.Module):
     def __init__(self, hidden_size):
         super(SelfAttention, self).__init__()
