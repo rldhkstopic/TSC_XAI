@@ -1,7 +1,59 @@
 import os
 import numpy as np
+from scipy.signal import stft
+import matplotlib.pyplot as plt
+from PIL import Image
 
+def add_awgn(signal, snr_db):
+    signal_power = np.mean(np.abs(signal) ** 2)
+    snr_linear = 10 ** (snr_db / 10.0)
+    noise_power = signal_power / snr_linear
+    noise = np.sqrt(noise_power / 2) * (np.random.randn(len(signal)) + 1j * np.random.randn(len(signal)))
+    return signal + noise, noise
 
+fs = 100e6
+def deployment(wav, snr, waveform, fps_idx, dir= '/data/kiwan/LPI_KIWAN', only_stft=False):
+    attenuationset = np.arange(-20, 2, 2)
+    delayset = np.arange(1, 1001, 50) * 1e-9
+    
+    delays = np.random.choice(delayset, 5, replace=False)
+    gains = np.random.choice(attenuationset, 5, replace=False)
+    
+    signal = multipath_channel(wav, fs, delays, gains)
+    noisy_signal, noise = add_awgn(signal, snr)
+    
+    I = signal.real
+    Q = signal.imag
+    power = np.mean(I ** 2 + Q ** 2)
+    pnorm_signal = signal / (np.sqrt(power) + 1e-6)
+    
+    pnorm_signal, _ = add_awgn(pnorm_signal, snr)
+    
+    if only_stft==False:
+        waveform_folder = os.path.join(dir, waveform)
+        np.save(os.path.join(waveform_folder, f'{waveform}_snr{snr}_Signal_{fps_idx}.npy'), wav)
+        np.save(os.path.join(waveform_folder, f'{waveform}_snr{snr}_Noise_{fps_idx}.npy'), noise)
+        np.save(os.path.join(waveform_folder, f'{waveform}_snr{snr}_Noisy_{fps_idx}.npy'), noisy_signal)
+        np.save(os.path.join(waveform_folder, f'{waveform}_snr{snr}_pwnNoisy_{fps_idx}.npy'), pnorm_signal)
+
+    elif only_stft==True:
+        stft_folder = os.path.join(dir, 'STFT')
+        stft_result(pnorm_signal, fs, stft_folder, waveform, snr, fps_idx, img_size=(128, 128))
+    
+def stft_result(signal, fs, out_dir, wf, snr, idx, img_size=(128, 128)):
+    f, t, Zxx = stft(signal, fs, nperseg=256)
+    Zxx_mag = np.abs(Zxx[:len(f)//2])
+
+    fig, ax = plt.subplots(figsize=(img_size[0] / 100, img_size[1] / 100), dpi=100)
+    ax.pcolormesh(t, f[:len(f)//2], Zxx_mag, shading='gouraud')
+    ax.axis('off')
+    
+    img_dir = os.path.join(out_dir, f'{wf}')
+    os.makedirs(img_dir, exist_ok=True)
+    img_path = os.path.join(img_dir, f'{wf}_snr{snr}_STFT_{idx}.png')
+    fig.savefig(img_path, bbox_inches='tight', pad_inches=0)
+    plt.close(fig)
+    
 def create_folder(path):
     if not os.path.exists(path):
         os.makedirs(path)
@@ -194,34 +246,3 @@ def type_T4(NumberSamples, fs, A, fc, Nps, B):
     return s
 
 
-def add_awgn(signal, snr_db):
-    signal_power = np.mean(np.abs(signal) ** 2)
-    snr_linear = 10 ** (snr_db / 10.0)
-    noise_power = signal_power / snr_linear
-    noise = np.sqrt(noise_power / 2) * (np.random.randn(len(signal)) + 1j * np.random.randn(len(signal)))
-    return signal + noise, noise
-
-fs = 100e6
-def deployment(wav, snr, waveform, fps_idx, dir= '/data/kiwan/LPI_KIWAN'):
-    attenuationset = np.arange(-20, 2, 2)
-    delayset = np.arange(1, 1001, 50) * 1e-9
-    
-    delays = np.random.choice(delayset, 5, replace=False)
-    gains = np.random.choice(attenuationset, 5, replace=False)
-    
-    signal = multipath_channel(wav, fs, delays, gains)
-    noisy_signal, noise = add_awgn(signal, snr)
-    
-    I = signal.real
-    Q = signal.imag
-    power = np.mean(I ** 2 + Q ** 2)
-    pnorm_signal = signal / (np.sqrt(power) + 1e-6)
-    
-    pnorm_signal, _ = add_awgn(pnorm_signal, snr)
-    
-    waveform_folder = os.path.join(dir, waveform)
-    np.save(os.path.join(waveform_folder, f'{waveform}_snr{snr}_Signal_{fps_idx}.npy'), wav)
-    np.save(os.path.join(waveform_folder, f'{waveform}_snr{snr}_Noise_{fps_idx}.npy'), noise)
-    np.save(os.path.join(waveform_folder, f'{waveform}_snr{snr}_Noisy_{fps_idx}.npy'), noisy_signal)
-    np.save(os.path.join(waveform_folder, f'{waveform}_snr{snr}_pwnNoisy_{fps_idx}.npy'), pnorm_signal)
-    

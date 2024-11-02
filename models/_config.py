@@ -15,8 +15,8 @@ typeSize = 12
 fs = 100e6
 
 def collate(batch):
-    if isinstance(batch[0][2], int):  
-        data, labels, lengths = zip(*batch)
+    if isinstance(batch[0][3], int):  
+        data, labels, lengths, _ = zip(*batch)
         data = [torch.tensor(seq, dtype=torch.float32) for seq in data]
         data_pad = rnn_utils.pad_sequence(data, batch_first=True)
 
@@ -26,7 +26,7 @@ def collate(batch):
         return data_pad, labels, lengths
 
     else:  # UNet 또는 U2Net 모델
-        data, labels = zip(*batch)
+        data, labels, _ = zip(*batch)
         data = torch.stack(data, dim=0)
         label_to_index = {label: idx for idx, label in enumerate(waveforms)}
         labels = torch.tensor([int(label) for label in labels], dtype=torch.long)

@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import torch
+from torchvision import transforms
 from scipy.signal import stft
 
 class LPIDataset:
@@ -11,6 +12,8 @@ class LPIDataset:
         self.file_list = self._collect()
         self.nperseg = nperseg  # STFT 윈도우 크기
         self.model_type = model_type
+        self.resize_shape = (128, 128)  
+        self.resize_transform = transforms.Resize(self.resize_shape)
 
     def _collect(self):
         """ 데이터 파일 목록을 수집 """
@@ -31,11 +34,15 @@ class LPIDataset:
         return complex_data.real, complex_data.imag
 
     def _stft_transform(self, data):
-        """ 시계열 데이터를 STFT로 변환하여 TFI 이미지 생성 """
         f, t, Zxx_real = stft(data.real, nperseg=self.nperseg)
         _, _, Zxx_imag = stft(data.imag, nperseg=self.nperseg)
-        TFI_image = np.stack([np.abs(Zxx_real), np.abs(Zxx_imag)], axis=0)  # (2, freq, time) 형태
-        return TFI_image
+        
+        TFI_image = np.stack([np.abs(Zxx_real), np.abs(Zxx_imag)], axis=0)  # (2, freq, time)
+        
+        TFI_tensor = torch.tensor(TFI_image, dtype=torch.float32)
+        TFI_tensor = self.resize_transform(TFI_tensor)
+        
+        return TFI_tensor
 
     def __len__(self):
         return len(self.file_list)
@@ -45,7 +52,6 @@ class LPIDataset:
         type, label, snr, fps_idx = self._parse(file)
         file_path = os.path.join(self.data_dir, label, file)
 
-        # I/Q 데이터 로드
         complex_data = np.load(file_path)
 
         if self.model_type == 'BiLSTM':
@@ -53,12 +59,12 @@ class LPIDataset:
             IQ_data = [self._convIQ(c) for c in complex_data]
             data_tensor = torch.tensor(IQ_data, dtype=torch.float32)
             length = len(data_tensor)  # 시퀀스 길이 반환
-            return data_tensor, label, length
+            return data_tensor, label, length, snr
 
         else:
             # UNet 및 U2Net 모델의 경우 STFT 변환된 TFI 이미지 사용
             TFI_image = self._stft_transform(complex_data)
             data_tensor = torch.tensor(TFI_image, dtype=torch.float32)
-            return data_tensor, label  # CNN 모델이므로 시퀀스 길이는 필요 없음
+            return data_tensor, label, snr
 
 
