@@ -9,15 +9,16 @@ from models.LSTM import BiLSTM
 from models.UNET import UNet, U2Net
 from dataset.LPIdataset import LPIDataset
 
+
 def Train(model_type, data_dir, waveforms, datatype='pwnNoisy', batch_size=256, epochs=500, learning_rate=0.001, weight_decay=1e-5, device_ids=[0, 1]):
     CEloss = nn.CrossEntropyLoss()
-
+    
     if model_type == 'BiLSTM':
         model = BiLSTM(input_size=2, hidden_size=128, num_layers=2, num_classes=len(waveforms))
     elif model_type == 'UNet':
-        model = UNet(in_channels=2, out_channels=len(waveforms))
+        model = UNet(in_channels=1, out_channels=len(waveforms))
     elif model_type == 'U2Net':
-        model = U2Net(in_channels=2, out_channels=len(waveforms))
+        model = U2Net(in_channels=1, out_channels=len(waveforms))
     else:
         raise ValueError("Invalid model_type. Choose from 'BiLSTM', 'UNet', 'U2Net'.")
     
@@ -26,13 +27,9 @@ def Train(model_type, data_dir, waveforms, datatype='pwnNoisy', batch_size=256, 
 
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
-    if model_type == 'BiLSTM':
-        dataset = LPIDataset(data_dir, waveforms, data_type=datatype)               # 시계열 데이터
-    else:
-        dataset = LPIDataset(data_dir, waveforms, data_type=datatype, nperseg=256)  # STFT로 TFI 변환 포함
-
+    dataset = LPIDataset(data_dir, waveforms, data_type=datatype, model_type=model_type)
     dataload = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=c.collate)
-
+    
     best_loss = float('inf')
     best_state = None
     losses = []
@@ -41,7 +38,7 @@ def Train(model_type, data_dir, waveforms, datatype='pwnNoisy', batch_size=256, 
         total_loss = 0.0
         progress = tqdm(enumerate(dataload), total=len(dataload), desc=f"Epoch {epoch + 1}/{epochs}", leave=False)
 
-        for batch_idx, (data, labels, lengths) in progress:
+        for batch_idx, (data, labels, lengths, snrs) in progress:
             if model_type == 'BiLSTM':
                 # BiLSTM은 시계열 입력
                 data, labels = data.cuda(), labels.cuda()
@@ -51,7 +48,8 @@ def Train(model_type, data_dir, waveforms, datatype='pwnNoisy', batch_size=256, 
                 data, labels = data.cuda(), labels.cuda()
                 outputs = model(data)
 
-            
+
+
             loss = CEloss(outputs, labels)
             loss.backward()
             optimizer.step()
@@ -70,10 +68,11 @@ def Train(model_type, data_dir, waveforms, datatype='pwnNoisy', batch_size=256, 
         if avg_loss < best_loss:
             best_loss = avg_loss
             best_state = model.state_dict()
-            torch.save(best_state, f'./ckpts/{datatype}/_best_{best_loss:.4f}.pth')
+            torch.save(best_state, f'./ckpts/{datatype}/{model_type}_best_{best_loss:.4f}.pth')
             if best_loss < 0.002:
                 break
 
         torch.cuda.empty_cache()
     
-    torch.save(model.state_dict(), f'./ckpts/{datatype}/_last_{best_loss:.4f}.pth')
+    torch.save(model.state_dict(), f'./ckpts/{datatype}/{model_type}_last_{best_loss:.4f}.pth')
+    

@@ -13,11 +13,13 @@ if __name__ == "__main__":
     
     # 모델 유형 확인 및 유효성 검사
     model_type = args.model_type
-    if model_type not in ['BiLSTM', 'UNet', 'U2Net']:
-        raise ValueError("Invalid model_type specified. Choose from 'BiLSTM', 'UNet', 'U2Net'.")
+    if model_type in ['UNet', 'U2Net']:
+        data_dir = '/data/kiwan/LPI_KIWAN_STFT/'
+        
 
     # Train, Test, 또는 Explain 모드 실행
     if args.mode == 'train':
+        
         Train(
             model_type=model_type,
             batch_size=args.batch_size,

@@ -18,7 +18,8 @@ class UNet(nn.Module):
         self.decoder2 = self.conv_block(256 + 128, 128)
         self.decoder1 = self.conv_block(128 + 64, 64)
 
-        self.output = nn.Conv2d(64, out_channels, kernel_size=1)
+        self.global_pool = nn.AdaptiveAvgPool2d(1)  # 각 채널의 평균을 구하여 1x1 형태로 축소
+        self.output = nn.Linear(64, out_channels)
 
     def conv_block(self, in_channels, out_channels):
         return nn.Sequential(
@@ -46,7 +47,10 @@ class UNet(nn.Module):
         d2 = self.decoder2(torch.cat([F.interpolate(d3, scale_factor=2), e2], dim=1))
         d1 = self.decoder1(torch.cat([F.interpolate(d2, scale_factor=2), e1], dim=1))
 
-        return self.output(d1)
+        pooled = self.global_pool(d1).view(d1.size(0), -1)  # (batch_size, 64)
+        class_logits = self.output(pooled)
+        
+        return class_logits
 
 
 class U2Net(nn.Module):

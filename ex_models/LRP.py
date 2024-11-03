@@ -125,3 +125,86 @@ class LRP:
             for j in range(r.size(1)):
                 rel_c[i] += (c[i] * fc_W[j]) * r[i, j] / (fc_W[j].abs().sum() + self.epsilon)
         return rel_c
+
+import torch
+import torch.nn.functional as F
+
+class UNetLRP:
+    def __init__(self, model, epsilon=1e-6):
+        self.model = model
+        self.epsilon = epsilon 
+
+    def forward(self, x):
+        """
+        원본 UNet 모델을 통해 forward pass를 실행하고 feature map을 저장
+        """
+        e1 = self.model.encoder1(x)
+        e2 = self.model.encoder2(F.max_pool2d(e1, 2))
+        e3 = self.model.encoder3(F.max_pool2d(e2, 2))
+        e4 = self.model.encoder4(F.max_pool2d(e3, 2))
+        m = self.model.middle(F.max_pool2d(e4, 2))
+
+        # 디코더 부분 및 skip connection 저장
+        d4 = self.model.decoder4(torch.cat([F.interpolate(m, scale_factor=2), e4], dim=1))
+        d3 = self.model.decoder3(torch.cat([F.interpolate(d4, scale_factor=2), e3], dim=1))
+        d2 = self.model.decoder2(torch.cat([F.interpolate(d3, scale_factor=2), e2], dim=1))
+        d1 = self.model.decoder1(torch.cat([F.interpolate(d2, scale_factor=2), e1], dim=1))
+
+        pooled = self.model.global_pool(d1).view(d1.size(0), -1)
+        output_logits = self.model.output(pooled)
+        
+        return output_logits, [d1, d2, d3, d4, m, e4, e3, e2, e1]
+
+    def relevance_propagation(self, R):
+        """
+        relevance R을 입력으로 받아 모델의 각 층으로 relevance를 역전파
+        """
+        R = self.lrp_fc(self.model.output, R)
+        
+        R = self.lrp_conv_block(self.model.global_pool, R)
+        R = self.lrp_decode(self.model.decoder1, R)
+        R = self.lrp_decode(self.model.decoder2, R)
+        R = self.lrp_decode(self.model.decoder3, R)
+        R = self.lrp_decode(self.model.decoder4, R)
+        
+        R = self.lrp_conv_block(self.model.middle, R)
+        
+        R = self.lrp_encode(self.model.encoder4, R)
+        R = self.lrp_encode(self.model.encoder3, R)
+        R = self.lrp_encode(self.model.encoder2, R)
+        R = self.lrp_encode(self.model.encoder1, R)
+        
+        return R
+
+    def lrp_fc(self, layer, R):
+        weight = layer.weight + self.epsilon
+        Z = layer.weight.T @ R  # Relevance 분포
+        S = R / Z
+        C = weight * S
+        return C.sum(dim=1)
+
+    def lrp_conv_block(self, layer, R):
+        for conv_layer in reversed(layer):
+            if isinstance(conv_layer, torch.nn.Conv2d):
+                R = self.propagate_conv2d(conv_layer, R)
+        return R
+
+    def propagate_conv2d(self, layer, R):
+        Z = layer.weight * layer.input
+        S = R / (Z + self.epsilon)
+        C = Z * S
+        return C.sum(dim=1)
+
+    def lrp_decode(self, layer, R):
+        """
+        디코더 부분에서 skip connection과 함께 역전파
+        """
+        R = self.lrp_conv_block(layer, R)
+        R = F.interpolate(R, scale_factor=2, mode='nearest')
+        return R
+
+    def lrp_encode(self, layer, R):
+        """
+        인코더 부분에서 relevance를 역전파
+        """
+        return self.lrp_conv_block(layer, R)
