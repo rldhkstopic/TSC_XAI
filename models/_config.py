@@ -47,7 +47,7 @@ def fft_transform(data_real, data_imag=None, fs=100e6):
 
 def stft_transform(data_real, data_imag, fs=100e6, nperseg=256):
     complex_signal = data_real + 1j * data_imag
-    window = get_window('hann', 256)
+    window = get_window('hann', nperseg)
     f, t, Zxx = stft(complex_signal, fs=fs, nperseg=nperseg, window=window)
     stft_amp = np.abs(Zxx)
     return f, t, stft_amp
