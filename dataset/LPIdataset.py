@@ -22,7 +22,6 @@ class LPIDataset:
 
     def _collect(self):
         files = []
-        all_files = []
         for waveform in self.waveform:
             waveform_folder = os.path.join(self.data_dir, waveform)
             files.extend([f for f in os.listdir(waveform_folder) if self.data_type in f or 'STFT' in f])
