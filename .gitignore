@@ -1,6 +1,7 @@
 *.json
 *.pt
-
+*.npz
+*.npy
 *.npy
 *.csv
 
