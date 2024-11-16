@@ -1,8 +1,7 @@
 import torch
 import numpy as np
-from scipy.signal import stft
 import torch.nn.utils.rnn as rnn_utils
-from scipy.signal import stft, get_window
+from scipy.signal import stft, get_window, butter, filtfilt
 
 
 
@@ -15,6 +14,12 @@ label_mapping = {signal: idx for idx, signal in enumerate(waveforms)}
         
 typeSize = 12
 fs = 100e6
+
+
+def relevance_k(rfft):
+    magnitude =  rfft
+    relevance = magnitude / np.sum(magnitude)
+    return ifft_transform(relevance * rfft)
 
 def collate(batch):
     if len(batch[0])==5:  
@@ -34,6 +39,11 @@ def collate(batch):
         labels = torch.tensor([label_to_index[label] for label in labels], dtype=torch.long)
         return data, labels, None, snr, idx
 
+def highpass_filter(data, cutoff, fs, order=5):
+    nyquist = 0.5 * fs
+    normal_cutoff = cutoff / nyquist
+    b, a = butter(order, normal_cutoff, btype='high', analog=False)
+    return filtfilt(b, a, data)
 # ifft transform
 from scipy.fftpack import ifft
 
