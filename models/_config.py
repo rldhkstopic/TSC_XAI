@@ -34,6 +34,12 @@ def collate(batch):
         labels = torch.tensor([label_to_index[label] for label in labels], dtype=torch.long)
         return data, labels, None, snr, idx
 
+# ifft transform
+from scipy.fftpack import ifft
+
+def ifft_transform(fft_data):
+    ifft_data = ifft(fft_data)
+    return ifft_data.real+1j*ifft_data.imag
 
 def fft_transform(data_real, data_imag=None, fs=100e6):
     if data_imag is not None:
