@@ -1,3 +1,4 @@
+import os
 import torch
 import numpy as np
 import torch.nn.utils.rnn as rnn_utils
@@ -15,11 +16,29 @@ label_mapping = {signal: idx for idx, signal in enumerate(waveforms)}
 typeSize = 12
 fs = 100e6
 
+def load_models(ckpt_path, device):
+    from ex_models.LRP import LRP
+    from models.LSTM import BiLSTM
+    
+    model = BiLSTM(input_size=2, hidden_size=128, num_layers=2, num_classes=len(waveforms)).to(device)
+    state_dict = {}
+    for k, v in torch.load(ckpt_path).items():
+        nk = k.replace('module.', '')
+        state_dict[nk] = v    
+    model.load_state_dict(state_dict)
+    model.eval()
+    return model, LRP(model, device=device)
 
-def relevance_k(rfft):
-    magnitude =  rfft
+
+def numpy_load(dir, file):
+    file = os.path.join(dir, file)
+    return np.load(file, allow_pickle=True)
+
+def relevance_k(data):
+    _, _, fft = fft_transform(data.real, data.imag, fs)
+    magnitude =  fft
     relevance = magnitude / np.sum(magnitude)
-    return ifft_transform(relevance * rfft)
+    return ifft_transform(relevance * fft)
 
 def collate(batch):
     if len(batch[0])==5:  
@@ -44,8 +63,14 @@ def highpass_filter(data, cutoff, fs, order=5):
     normal_cutoff = cutoff / nyquist
     b, a = butter(order, normal_cutoff, btype='high', analog=False)
     return filtfilt(b, a, data)
-# ifft transform
+
 from scipy.fftpack import ifft
+
+def fft_stft_transform(data, fs=100e6, nperseg=256):
+    complex_signal = data.real + 1j * data.imag
+    _, _, fft = fft_transform(data.real, data.imag, fs)
+    _, _, stft = stft_transform(data.real, data.imag, fs, nperseg)
+    return fft, stft
 
 def ifft_transform(fft_data):
     ifft_data = ifft(fft_data)
