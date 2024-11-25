@@ -48,7 +48,7 @@ class LPIDataset:
         file = self.file_list[idx]
         file_type, label, snr, fps_idx = self._parse(file)
         
-        if self.model_type == 'BiLSTM':
+        if self.model_type in ['BiLSTM', 'BiLSTM_CA']:
             # BiLSTM 모델의 경우 원본 시계열 데이터를 I/Q 분리하여 사용
             file_path = os.path.join(self.data_dir, label, file)
             complex_data = np.load(file_path)

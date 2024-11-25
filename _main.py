@@ -1,8 +1,11 @@
 from __params import getParams
 from _train import Train
+from _train_Rp import Train_ca
 # from _test import Test
 # from _explain import Explain
 
+import warnings
+warnings.filterwarnings("ignore")
 
 if __name__ == "__main__":
     args = getParams()
@@ -18,8 +21,7 @@ if __name__ == "__main__":
         
 
     # Train, Test, 또는 Explain 모드 실행
-    if args.mode == 'train':
-        
+    if args.mode == 'train':        
         Train(
             model_type=model_type,
             batch_size=args.batch_size,
@@ -31,9 +33,15 @@ if __name__ == "__main__":
             waveforms=waveforms
         )
     elif args.mode == 'eval':
-        # Test 함수 호출 (dataset 인스턴스를 전달)
-        # Test(dataset=dataset, mtype=model_type)
-        pass
+            
+        Train_ca(
+                model_type='BiLSTM_CA',
+                data_dir=data_dir,
+                datatype=datatypes[-1],
+                waveforms=waveforms,
+                query_len=10,
+                val_split=0.15
+                )
     elif args.mode == 'explain':
         # Explain 함수 호출 (explain_set 인스턴스를 전달)
         # Explain(explain_set=dataset)
