@@ -6,7 +6,7 @@ import models._config as c
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from models.LSTM import BiLSTM
-from models.UNET import UNet, U2Net
+from models.CNN import UNet, U2Net
 from dataset.LPIdataset import LPIDataset
 
 

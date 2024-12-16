@@ -6,7 +6,7 @@ class LRP:
         self.epsilon = epsilon
         self.device = device
     
-    def relevance(self, x, lengths, target=None, attributions=None):
+    def relevance(self, x, lengths, target=None, attributions=None, dft_lrp = False):
         x = x.to(self.device)
         lengths = lengths.cpu()
         output, h, a = self.model(x, lengths, lstm_outputs=True)
@@ -20,10 +20,10 @@ class LRP:
         r_c = self.bpp_fc(h, r)
         
         # Attention layer에 대한 relevance 계산 (Ω-LRP rule)
-        # r_h = self.bpp_att(r_c, h, a)
+        r_h = self.bpp_att(r_c, h, a)
         
         # LSTM에 대한 relevance 계산 (lstm cell 내 각 게이트에 ε-LRP 및 Copy LRP 적용)
-        r_x = self.bpp_bilstm(r_c, h, x, lengths)
+        r_x = self.bpp_bilstm(r_h, h, x, lengths)
         
         gt_label = torch.argmax(output, dim=1)
         
@@ -31,6 +31,7 @@ class LRP:
             return r_x, gt_label
         else:
             return r_c, r_x, a, h, gt_label
+        
     
     def lstm_gates(self, x_t, h_prev, W_ih, W_hh, b_ih, b_hh, cl_prev):
         x_t = x_t.to(self.device)
@@ -117,6 +118,7 @@ class LRP:
             rel_h[i] = r_c[i].unsqueeze(0) * w[i].unsqueeze(-1)
         return rel_h
     
+
     def bpp_fc(self, c, r):
         # Fully Connected Layer에서 LRP-all rule 적용
         fc_W = self.model.fc.weight

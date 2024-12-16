@@ -11,6 +11,7 @@ if __name__ == "__main__":
     args = getParams()
 
     data_dir = '/data/kiwan/LPI_KIWAN/'
+    rp_dir = '/home/kiwan/TSC_XAI/ckpts/batch_/All_R>0_class_dB/data_batch.npz'
     datatypes = ['Signal', 'Noise', 'Noisy', 'pwnNoisy']
     waveforms = ['Barker', 'Costas', 'Frank', 'LFM', 'P1', 'P2', 'P3', 'P4', 'T1', 'T2', 'T3', 'T4']
     
@@ -33,15 +34,14 @@ if __name__ == "__main__":
             waveforms=waveforms
         )
     elif args.mode == 'eval':
-            
         Train_ca(
-                model_type='BiLSTM_CA',
-                data_dir=data_dir,
-                datatype=datatypes[-1],
-                waveforms=waveforms,
-                query_len=10,
-                val_split=0.15
-                )
+            model_type='BiLSTM_CA',
+            data_dir=data_dir,
+            datatype=datatypes[-1],
+            waveforms=waveforms,
+            query_len=10,
+            val_split=0.1
+            )
     elif args.mode == 'explain':
         # Explain 함수 호출 (explain_set 인스턴스를 전달)
         # Explain(explain_set=dataset)

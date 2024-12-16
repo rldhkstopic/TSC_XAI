@@ -37,7 +37,7 @@ def deployment(wav, snr, waveform, fps_idx, dir= '/data/kiwan/LPI_KIWAN', only_s
         np.save(os.path.join(waveform_folder, f'{waveform}_snr{snr}_pwnNoisy_{fps_idx}.npy'), pnorm_signal)
 
     elif only_stft==True:
-        stft_folder = os.path.join(dir, 'STFT')
+        stft_folder = dir + '_STFT'
         stft_result(pnorm_signal, fs, stft_folder, waveform, snr, fps_idx, img_size=(128, 128))
     
 def stft_result(signal, fs, out_dir, wf, snr, idx, img_size=(128, 128)):

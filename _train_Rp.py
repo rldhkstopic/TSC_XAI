@@ -34,10 +34,10 @@ def Train_ca(
             hidden_size=128,
             num_layers=2,
             num_classes=len(waveforms),
-            query_len=query_len
+            factor=1
         )
     else:
-        raise ValueError(f"Invalid model_type '{model_type}'. Only 'BiLSTM_CrossAttention' is supported.")
+        raise ValueError(f"Invalid model_type '{model_type}'. Only 'BiLSTM_CA' is supported.")
     
     model = nn.DataParallel(model, device_ids=device_ids).to(device)
 
@@ -114,10 +114,10 @@ def Train_ca(
         print(f"Validation Loss: {val_loss:.4f}, Validation Accuracy: {val_accuracy:.4%}")
 
         # Save best model
-        if val_loss < best_loss:
+        if avg_loss < best_loss and avg_loss < 0.5:
             best_loss = val_loss
             best_state = model.state_dict()
-            torch.save(best_state, f'./ckpts/{datatype}/{model_type}_best_{best_loss:.4f}.pth')
+            torch.save(best_state, f'./ckpts/{datatype}/{model_type}4_best_{best_loss:.4f}.pth')
             print(f"New best model saved with loss {best_loss:.4f}")
 
         # Early stopping condition
@@ -129,7 +129,7 @@ def Train_ca(
         torch.cuda.empty_cache()
 
     # Save the last model state
-    torch.save(model.state_dict(), f'./ckpts/{datatype}/{model_type}_last_{best_loss:.4f}.pth')
+    torch.save(model.state_dict(), f'./ckpts/{datatype}/{model_type}4_last_{best_loss:.4f}.pth')
     print("Training complete. Final model saved.")
 
     return model, losses, val_accuracies

@@ -31,7 +31,7 @@ class UNet(nn.Module):
             nn.ReLU(inplace=True)
         )
 
-    def forward(self, x):
+    def forward(self, x, activation=False):
         # 인코딩
         e1 = self.encoder1(x)
         e2 = self.encoder2(F.max_pool2d(e1, 2))
@@ -40,12 +40,15 @@ class UNet(nn.Module):
 
         # 중간
         m = self.middle(F.max_pool2d(e4, 2))
-
+        
         # 디코딩 + Skip Connection
         d4 = self.decoder4(torch.cat([F.interpolate(m, scale_factor=2), e4], dim=1))
         d3 = self.decoder3(torch.cat([F.interpolate(d4, scale_factor=2), e3], dim=1))
         d2 = self.decoder2(torch.cat([F.interpolate(d3, scale_factor=2), e2], dim=1))
         d1 = self.decoder1(torch.cat([F.interpolate(d2, scale_factor=2), e1], dim=1))
+        
+        if activation:
+            return e1, e2, e3, e4, m, d4, d3, d2, d1
 
         pooled = self.global_pool(d1).view(d1.size(0), -1)  # (batch_size, 64)
         class_logits = self.output(pooled)

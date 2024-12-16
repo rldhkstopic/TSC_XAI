@@ -37,7 +37,9 @@ def numpy_load(dir, file):
 def relevance_k(data):
     _, _, fft = fft_transform(data.real, data.imag, fs)
     magnitude =  fft
-    relevance = magnitude / np.sum(magnitude)
+    relevance = magnitude / np.abs(magnitude)
+    #     relevance_k = relevance_fft * data_fft / (np.abs(data_fft) + 1e-6)
+
     return ifft_transform(relevance * fft)
 
 def collate(batch):

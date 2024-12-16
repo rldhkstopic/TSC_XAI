@@ -63,6 +63,7 @@ class LPIDataset:
 
             image = Image.open(img_path)
             image = self.resize_transform(image)  # 리사이즈 및 텐서 변환
-            
+            if not isinstance(image, torch.Tensor):
+                image = transforms.ToTensor()(image)
             
             return image, label, snr, fps_idx
